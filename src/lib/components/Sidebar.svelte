@@ -122,7 +122,7 @@
 		</div>
 	{/if}
 
-	{#if !collapsed && domains.length > 0}
+	{#if !collapsed && domains.length > 1}
 		<div class="section">
 			<p class="section-title">Domains</p>
 			<div class="section-body">
