@@ -40,7 +40,12 @@
 
 	const tools = $derived<NavItem[]>([
 		{ href: '/settings', icon: 'user-settings-line', label: 'Settings' },
-		...(isAdmin ? [{ href: '/admin', icon: 'settings-3-line', label: 'Admin' }] : [])
+		...(isAdmin
+			? [
+					{ href: '/admin', icon: 'settings-3-line', label: 'Admin' },
+					{ href: '/admin/mailboxes', icon: 'mail-settings-line', label: 'Mailboxes' }
+				]
+			: [])
 	]);
 
 	function isActive(href: string): boolean {
