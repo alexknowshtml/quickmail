@@ -1,6 +1,6 @@
 import type { D1Database, R2Bucket } from '@cloudflare/workers-types';
 import type { CloudflareSendEmailBinding } from '$lib/server/providers/cloudflare-provider';
-import type { Domain, MailAddress, User } from '$lib/types';
+import type { Domain, MailAddress, SharedMailbox, User } from '$lib/types';
 
 declare global {
 	namespace App {
@@ -28,6 +28,8 @@ declare global {
 			addresses: MailAddress[];
 			/** Active domain filter, or null for the combined inbox. */
 			activeDomainId: string | null;
+			/** Shared mailboxes this user is a member of. */
+			mailboxes: SharedMailbox[];
 		}
 	}
 }

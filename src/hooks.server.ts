@@ -2,6 +2,7 @@ import { redirect, type Handle } from '@sveltejs/kit';
 import { countUsers, getUserFromSession, readSessionToken } from '$lib/server/auth';
 import { DOMAIN_COOKIE } from '$lib/server/constants';
 import { listAddressesForUser, listDomains } from '$lib/server/domains';
+import { listMailboxesForUser } from '$lib/server/mailbox-auth';
 
 const PUBLIC_PREFIXES = ['/login', '/setup', '/api/auth', '/api/setup', '/api/webhooks'];
 
@@ -14,6 +15,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	event.locals.user = null;
 	event.locals.domains = [];
 	event.locals.addresses = [];
+	event.locals.mailboxes = [];
 	event.locals.activeDomainId = null;
 
 	if (db) {
@@ -29,13 +31,15 @@ export const handle: Handle = async ({ event, resolve }) => {
 	}
 
 	if (db && event.locals.user) {
-		const [domains, addresses] = await Promise.all([
+		const [domains, addresses, mailboxes] = await Promise.all([
 			listDomains(db),
-			listAddressesForUser(db, event.locals.user.id)
+			listAddressesForUser(db, event.locals.user.id),
+			listMailboxesForUser(db, event.locals.user.id)
 		]);
 
 		event.locals.domains = domains;
 		event.locals.addresses = addresses;
+		event.locals.mailboxes = mailboxes;
 
 		// Only honour a domain filter that is still connected.
 		const selected = event.cookies.get(DOMAIN_COOKIE);
@@ -90,7 +94,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 	// Nothing works until a provider domain is connected and the user owns an
 	// address on it, so send them through onboarding first.
 	const needsOnboarding =
-		event.locals.domains.length === 0 || event.locals.addresses.length === 0;
+		event.locals.domains.length === 0 ||
+		(event.locals.addresses.length === 0 && event.locals.mailboxes.length === 0);
 
 	if (needsOnboarding && pathname !== '/onboarding') {
 		throw redirect(303, '/onboarding');

@@ -193,3 +193,26 @@ export type OutboundAttachmentInput = {
 	type: string;
 	content: string;
 };
+
+export type SharedMailbox = {
+	id: string;
+	name: string;
+	owner_user_id: string;
+	created_at: string;
+	/** Role this user holds — from the mailbox_members join. */
+	role: 'member' | 'manager';
+};
+
+export type MailboxMember = {
+	mailbox_id: string;
+	user_id: string;
+	role: 'member' | 'manager';
+	/** Joined from users table. */
+	name: string;
+	email: string;
+};
+
+export type SharedMailboxDetail = SharedMailbox & {
+	members: MailboxMember[];
+	addresses: MailAddress[];
+};
