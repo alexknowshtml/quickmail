@@ -114,7 +114,7 @@
 						title={collapsed ? mailbox.name : undefined}
 						onclick={() => (mobileOpen = false)}
 					>
-						<Icon name="mail-shared-line" size={17} />
+						<Icon name="group-line" size={17} />
 						{#if !collapsed}<span class="nav-label">{mailbox.name}</span>{/if}
 					</a>
 				{/each}
