@@ -15,9 +15,11 @@
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:clean": "bun scripts/check-template-clean.mjs",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-		"cf-typegen": "wrangler types"
+		"cf-typegen": "wrangler types",
+		"test": "vitest run"
 	},
 	"devDependencies": {
+		"@cloudflare/vitest-pool-workers": "^0.22.0",
 		"@cloudflare/workers-types": "^4.20260601.1",
 		"@sveltejs/adapter-auto": "^7.0.1",
 		"@sveltejs/adapter-cloudflare": "^7.2.8",
@@ -25,12 +27,15 @@
 		"@sveltejs/vite-plugin-svelte": "^7.0.0",
 		"@tailwindcss/vite": "^4.2.2",
 		"@types/node": "^24.10.1",
+		"@vitest/runner": "^4.1.11",
+		"@vitest/snapshot": "^4.1.11",
 		"svelte": "^5.55.2",
 		"svelte-check": "^4.4.6",
 		"tailwindcss": "^4.2.2",
 		"typescript": "^6.0.2",
 		"vite": "^8.0.7",
-		"wrangler": "^4.96.0"
+		"vitest": "^4.1.11",
+		"wrangler": "^4.124.0"
 	},
 	"dependencies": {
 		"postal-mime": "^3.0.0",
