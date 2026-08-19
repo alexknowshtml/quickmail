@@ -11,6 +11,7 @@ import type {
 	MailboxCounts,
 	MailboxPage,
 	MailboxView,
+	MailScope,
 	MailStatus,
 	ThreadMessage,
 	ThreadParticipant,
@@ -169,6 +170,22 @@ function displayFilter(view: MailboxView, alias: string): string {
 	}
 }
 
+/** Returns the WHERE clause and value to scope an aliased query (e.g. `emails e`). */
+function eScope(scope: MailScope, alias = 'e'): { clause: string; binding: string } {
+	if (scope.kind === 'user') {
+		return { clause: `${alias}.user_id = ? AND ${alias}.mailbox_id IS NULL`, binding: scope.userId };
+	}
+	return { clause: `${alias}.mailbox_id = ?`, binding: scope.mailboxId };
+}
+
+/** Returns the WHERE clause and value for unaliased queries (e.g. plain `emails`). */
+function rawScope(scope: MailScope): { clause: string; binding: string } {
+	if (scope.kind === 'user') {
+		return { clause: 'user_id = ? AND mailbox_id IS NULL', binding: scope.userId };
+	}
+	return { clause: 'mailbox_id = ?', binding: scope.mailboxId };
+}
+
 export type MailboxQuery = {
 	view: MailboxView;
 	/** Restrict to one connected domain; omit for the combined view. */
@@ -199,9 +216,13 @@ type ThreadMessageRow = {
 };
 
 /** Builds the WHERE clause and bindings shared by the count and the page query. */
-function buildScope(userId: string, query: MailboxQuery): { where: string; bindings: unknown[] } {
-	const filters = ['e.user_id = ?', viewFilter(query.view)];
-	const bindings: unknown[] = [userId];
+function buildListFilters(
+	scope: MailScope,
+	query: MailboxQuery
+): { where: string; bindings: unknown[] } {
+	const sc = eScope(scope);
+	const filters = [sc.clause, viewFilter(query.view)];
+	const bindings: unknown[] = [sc.binding];
 
 	if (query.domainId) {
 		filters.push('e.domain_id = ?');
@@ -233,12 +254,13 @@ function buildScope(userId: string, query: MailboxQuery): { where: string; bindi
  */
 export async function listMailbox(
 	db: D1Database,
-	userId: string,
+	scope: MailScope,
 	query: MailboxQuery
 ): Promise<MailboxPage> {
-	const { where, bindings } = buildScope(userId, query);
+	const { where, bindings } = buildListFilters(scope, query);
 	const pageSize = query.pageSize ?? MAILBOX_PAGE_SIZE;
 	const display = displayFilter(query.view, 'm');
+	const msg = eScope(scope, 'm');
 
 	const totalRow = await db
 		.prepare(
@@ -264,12 +286,12 @@ export async function listMailbox(
 				SELECT DISTINCT COALESCE(e.thread_id, e.id) AS thread_id FROM emails e WHERE ${where}
 			 ) t
 			 JOIN emails m
-			   ON m.user_id = ? AND COALESCE(m.thread_id, m.id) = t.thread_id AND ${display}
+			   ON ${msg.clause} AND COALESCE(m.thread_id, m.id) = t.thread_id AND ${display}
 			 GROUP BY t.thread_id
 			 ORDER BY last_at DESC
 			 LIMIT ? OFFSET ?`
 		)
-		.bind(...bindings, userId, pageSize, (page - 1) * pageSize)
+		.bind(...bindings, msg.binding, pageSize, (page - 1) * pageSize)
 		.all<{ thread_id: string; last_at: string }>();
 
 	const threadIds = rows.map((row) => row.thread_id);
@@ -285,10 +307,10 @@ export async function listMailbox(
 			        substr(COALESCE(m.body_text, ''), 1, 4000) AS body_head,
 			        EXISTS(SELECT 1 FROM email_attachments a WHERE a.email_id = m.id) AS has_attachments
 			 FROM emails m
-			 WHERE m.user_id = ? AND COALESCE(m.thread_id, m.id) IN (${placeholders}) AND ${display}
+			 WHERE ${msg.clause} AND COALESCE(m.thread_id, m.id) IN (${placeholders}) AND ${display}
 			 ORDER BY datetime(m.created_at) ASC`
 		)
-		.bind(userId, ...threadIds)
+		.bind(msg.binding, ...threadIds)
 		.all<ThreadMessageRow>();
 
 	const byThread = new Map<string, ThreadMessageRow[]>();
@@ -365,7 +387,7 @@ function buildPreview(bodyHead: string | null): string {
 /** Flat message list, used by the JSON API rather than the mailbox UI. */
 export async function listEmails(
 	db: D1Database,
-	userId: string,
+	scope: MailScope,
 	options: {
 		direction?: 'inbound' | 'outbound';
 		domainId?: string | null;
@@ -373,7 +395,7 @@ export async function listEmails(
 	} = {}
 ): Promise<EmailSummary[]> {
 	const view: MailboxView = options.direction === 'outbound' ? 'sent' : 'inbox';
-	const { where, bindings } = buildScope(userId, { view, domainId: options.domainId });
+	const { where, bindings } = buildListFilters(scope, { view, domainId: options.domainId });
 
 	const { results } = await db
 		.prepare(
@@ -412,13 +434,14 @@ export async function listEmails(
  */
 export async function getMailboxCounts(
 	db: D1Database,
-	userId: string,
+	scope: MailScope,
 	domainId?: string | null
 ): Promise<MailboxCounts> {
-	const bindings: unknown[] = [userId];
-	let scope = 'user_id = ?';
-	if (domainId) {
-		scope += ' AND domain_id = ?';
+	const sc = rawScope(scope);
+	const bindings: unknown[] = [sc.binding];
+	let where = sc.clause;
+	if (domainId && scope.kind === 'user') {
+		where += ' AND domain_id = ?';
 		bindings.push(domainId);
 	}
 
@@ -433,7 +456,7 @@ export async function getMailboxCounts(
 				COUNT(DISTINCT CASE WHEN deleted_at IS NULL AND status = 'draft' THEN ${thread} END) AS drafts,
 				COUNT(DISTINCT CASE WHEN deleted_at IS NULL AND direction = 'outbound' AND (status IS NULL OR status <> 'draft') THEN ${thread} END) AS sent,
 				COUNT(DISTINCT CASE WHEN deleted_at IS NOT NULL THEN ${thread} END) AS trash
-			 FROM emails WHERE ${scope}`
+			 FROM emails WHERE ${where}`
 		)
 		.bind(...bindings)
 		.first<Record<keyof MailboxCounts, number | null>>();
@@ -450,10 +473,10 @@ export async function getMailboxCounts(
 
 export async function countUnread(
 	db: D1Database,
-	userId: string,
+	scope: MailScope,
 	domainId?: string | null
 ): Promise<number> {
-	const counts = await getMailboxCounts(db, userId, domainId);
+	const counts = await getMailboxCounts(db, scope, domainId);
 	return counts.inbox_unread;
 }
 
@@ -464,21 +487,22 @@ export async function countUnread(
  */
 export async function expandToThreads(
 	db: D1Database,
-	userId: string,
+	scope: MailScope,
 	ids: string[]
 ): Promise<string[]> {
 	if (ids.length === 0) return [];
 
+	const sc = rawScope(scope);
 	const placeholders = ids.map(() => '?').join(', ');
 	const { results } = await db
 		.prepare(
 			`SELECT id FROM emails
-			 WHERE user_id = ?
+			 WHERE ${sc.clause}
 			 AND COALESCE(thread_id, id) IN (
-				SELECT COALESCE(thread_id, id) FROM emails WHERE user_id = ? AND id IN (${placeholders})
+				SELECT COALESCE(thread_id, id) FROM emails WHERE ${sc.clause} AND id IN (${placeholders})
 			 )`
 		)
-		.bind(userId, userId, ...ids)
+		.bind(sc.binding, sc.binding, ...ids)
 		.all<{ id: string }>();
 
 	return results.map((row) => row.id);
@@ -493,7 +517,7 @@ export type MailFlagUpdate = {
 /** Applies list actions (read/unread, star, trash, restore) to a set of rows. */
 export async function setEmailFlags(
 	db: D1Database,
-	userId: string,
+	scope: MailScope,
 	ids: string[],
 	update: MailFlagUpdate
 ): Promise<number> {
@@ -516,13 +540,14 @@ export async function setEmailFlags(
 
 	if (assignments.length === 0) return 0;
 
+	const sc = rawScope(scope);
 	const placeholders = ids.map(() => '?').join(', ');
 	const result = await db
 		.prepare(
 			`UPDATE emails SET ${assignments.join(', ')}
-			 WHERE user_id = ? AND id IN (${placeholders})`
+			 WHERE ${sc.clause} AND id IN (${placeholders})`
 		)
-		.bind(...bindings, userId, ...ids)
+		.bind(...bindings, sc.binding, ...ids)
 		.run();
 
 	return result.meta?.changes ?? 0;
@@ -532,15 +557,18 @@ export async function setEmailFlags(
 export async function deleteEmailsPermanently(
 	db: D1Database,
 	bucket: R2Bucket | undefined,
-	userId: string,
+	scope: MailScope,
 	ids: string[]
 ): Promise<number> {
 	if (ids.length === 0) return 0;
+	// Shared mailboxes are archive-only — hard deletes are forbidden.
+	if (scope.kind === 'mailbox') return 0;
 
+	const sc = rawScope(scope);
 	const placeholders = ids.map(() => '?').join(', ');
 	const owned = await db
-		.prepare(`SELECT id FROM emails WHERE user_id = ? AND id IN (${placeholders})`)
-		.bind(userId, ...ids)
+		.prepare(`SELECT id FROM emails WHERE ${sc.clause} AND id IN (${placeholders})`)
+		.bind(sc.binding, ...ids)
 		.all<{ id: string }>();
 
 	const ownedIds = owned.results.map((row) => row.id);
@@ -568,8 +596,8 @@ export async function deleteEmailsPermanently(
 		.run();
 
 	await db
-		.prepare(`DELETE FROM emails WHERE user_id = ? AND id IN (${ownedPlaceholders})`)
-		.bind(userId, ...ownedIds)
+		.prepare(`DELETE FROM emails WHERE ${sc.clause} AND id IN (${ownedPlaceholders})`)
+		.bind(sc.binding, ...ownedIds)
 		.run();
 
 	return ownedIds.length;
@@ -578,18 +606,19 @@ export async function deleteEmailsPermanently(
 /** "Mark all as read" from the list menu — scoped to the active domain filter. */
 export async function markAllRead(
 	db: D1Database,
-	userId: string,
+	scope: MailScope,
 	domainId?: string | null
 ): Promise<number> {
-	const bindings: unknown[] = [userId];
-	let scope = "user_id = ? AND direction = 'inbound' AND deleted_at IS NULL AND is_read = 0";
-	if (domainId) {
-		scope += ' AND domain_id = ?';
+	const sc = rawScope(scope);
+	const bindings: unknown[] = [sc.binding];
+	let where = `${sc.clause} AND direction = 'inbound' AND deleted_at IS NULL AND is_read = 0`;
+	if (domainId && scope.kind === 'user') {
+		where += ' AND domain_id = ?';
 		bindings.push(domainId);
 	}
 
 	const result = await db
-		.prepare(`UPDATE emails SET is_read = 1 WHERE ${scope}`)
+		.prepare(`UPDATE emails SET is_read = 1 WHERE ${where}`)
 		.bind(...bindings)
 		.run();
 
@@ -599,17 +628,21 @@ export async function markAllRead(
 export async function emptyTrash(
 	db: D1Database,
 	bucket: R2Bucket | undefined,
-	userId: string
+	scope: MailScope
 ): Promise<number> {
+	// Shared mailboxes are archive-only — emptyTrash is a no-op for mailbox scope.
+	if (scope.kind === 'mailbox') return 0;
+
+	const sc = rawScope(scope);
 	const { results } = await db
-		.prepare('SELECT id FROM emails WHERE user_id = ? AND deleted_at IS NOT NULL')
-		.bind(userId)
+		.prepare(`SELECT id FROM emails WHERE ${sc.clause} AND deleted_at IS NOT NULL`)
+		.bind(sc.binding)
 		.all<{ id: string }>();
 
 	return deleteEmailsPermanently(
 		db,
 		bucket,
-		userId,
+		scope,
 		results.map((row) => row.id)
 	);
 }
@@ -701,14 +734,15 @@ export async function deleteDraft(db: D1Database, userId: string, draftId: strin
 		.run();
 }
 
-export async function getEmailForUser(
+export async function getEmailForScope(
 	db: D1Database,
-	userId: string,
+	scope: MailScope,
 	emailId: string
 ): Promise<EmailRow | null> {
+	const sc = rawScope(scope);
 	const row = await db
-		.prepare('SELECT * FROM emails WHERE id = ? AND user_id = ?')
-		.bind(emailId, userId)
+		.prepare(`SELECT * FROM emails WHERE id = ? AND ${sc.clause}`)
+		.bind(emailId, sc.binding)
 		.first<EmailRow>();
 
 	return row ?? null;
@@ -721,14 +755,15 @@ export async function getEmailForUser(
  */
 export async function listThreadMessages(
 	db: D1Database,
-	userId: string,
+	scope: MailScope,
 	email: EmailRow
 ): Promise<ThreadMessage[]> {
 	const threadId = email.thread_id ?? email.id;
+	const sc = rawScope(scope);
 
 	// Opening a trashed message shows the trashed conversation; otherwise the
 	// live one. Drafts are edited in the composer, never inline.
-	const scope = email.deleted_at ? '' : 'AND e.deleted_at IS NULL';
+	const trashFilter = email.deleted_at ? '' : 'AND e.deleted_at IS NULL';
 
 	const { results } = await db
 		.prepare(
@@ -736,13 +771,13 @@ export async function listThreadMessages(
 			        e.body_text, e.body_html, e.message_id, e.references_header,
 			        e.status, e.status_detail, e.is_read, e.is_starred, e.deleted_at, e.created_at
 			 FROM emails e
-			 WHERE e.user_id = ?
+			 WHERE ${sc.clause}
 			 AND COALESCE(e.thread_id, e.id) = ?
 			 AND (e.status IS NULL OR e.status <> 'draft')
-			 ${scope}
+			 ${trashFilter}
 			 ORDER BY datetime(e.created_at) ASC`
 		)
-		.bind(userId, threadId)
+		.bind(sc.binding, threadId)
 		.all<
 			Omit<ThreadMessage, 'attachments' | 'is_read' | 'is_starred'> & {
 				is_read: number;
@@ -777,15 +812,16 @@ export async function listThreadMessages(
 /** Opening a conversation clears the unread state on all of its messages. */
 export async function markThreadRead(
 	db: D1Database,
-	userId: string,
+	scope: MailScope,
 	email: EmailRow
 ): Promise<void> {
+	const sc = rawScope(scope);
 	await db
 		.prepare(
 			`UPDATE emails SET is_read = 1
-			 WHERE user_id = ? AND COALESCE(thread_id, id) = ? AND deleted_at IS NULL`
+			 WHERE ${sc.clause} AND COALESCE(thread_id, id) = ? AND deleted_at IS NULL`
 		)
-		.bind(userId, email.thread_id ?? email.id)
+		.bind(sc.binding, email.thread_id ?? email.id)
 		.run();
 }
 
