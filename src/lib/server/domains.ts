@@ -23,6 +23,7 @@ type AddressRow = {
 	label: string | null;
 	is_default: number;
 	created_at: string;
+	mailbox_id: string | null;
 };
 
 function mapDomain(row: DomainRow): Domain {
@@ -160,7 +161,7 @@ export async function syncDomains(db: D1Database, provider: EmailProvider): Prom
 /* -------------------------------------------------------------------------- */
 
 const ADDRESS_SELECT = `SELECT a.id, a.user_id, a.domain_id, d.name AS domain_name, a.address,
-	a.label, a.is_default, a.created_at
+	a.label, a.is_default, a.created_at, a.mailbox_id
 	FROM addresses a JOIN domains d ON d.id = a.domain_id`;
 
 export async function listAddressesForUser(
@@ -272,6 +273,7 @@ export async function deleteAddress(
 
 export type InboundRoute = {
 	userId: string;
+	mailboxId: string | null;
 	domainId: string | null;
 	address: string;
 	viaCatchall: boolean;
@@ -296,10 +298,13 @@ export async function resolveInboundRoute(
 	const placeholders = candidates.map(() => '?').join(', ');
 	const { results } = await db
 		.prepare(
-			`SELECT user_id, domain_id, address FROM addresses WHERE address IN (${placeholders})`
+			`SELECT a.user_id, a.domain_id, a.address, a.mailbox_id, m.owner_user_id
+			 FROM addresses a
+			 LEFT JOIN mailboxes m ON m.id = a.mailbox_id
+			 WHERE a.address IN (${placeholders})`
 		)
 		.bind(...candidates)
-		.all<{ user_id: string; domain_id: string; address: string }>();
+		.all<{ user_id: string; domain_id: string; address: string; mailbox_id: string | null; owner_user_id: string | null }>();
 
 	if (results.length > 0) {
 		// Honour the order the recipients arrived in, not SQLite's row order.
@@ -307,7 +312,9 @@ export async function resolveInboundRoute(
 			const match = results.find((row) => row.address.toLowerCase() === candidate);
 			if (match) {
 				return {
-					userId: match.user_id,
+					// For shared addresses, user_id holds owner_user_id as bookkeeping.
+					userId: match.owner_user_id ?? match.user_id,
+					mailboxId: match.mailbox_id,
 					domainId: match.domain_id,
 					address: match.address,
 					viaCatchall: false
@@ -321,13 +328,31 @@ export async function resolveInboundRoute(
 		if (!domainName) continue;
 
 		const domain = await db
-			.prepare('SELECT id, catchall_user_id FROM domains WHERE name = ?')
+			.prepare('SELECT id, catchall_user_id, catchall_mailbox_id FROM domains WHERE name = ?')
 			.bind(domainName)
-			.first<{ id: string; catchall_user_id: string | null }>();
+			.first<{ id: string; catchall_user_id: string | null; catchall_mailbox_id: string | null }>();
+
+		// Shared catchall takes priority over personal catchall.
+		if (domain?.catchall_mailbox_id) {
+			const mailbox = await db
+				.prepare('SELECT owner_user_id FROM mailboxes WHERE id = ?')
+				.bind(domain.catchall_mailbox_id)
+				.first<{ owner_user_id: string }>();
+			if (mailbox) {
+				return {
+					userId: mailbox.owner_user_id,
+					mailboxId: domain.catchall_mailbox_id,
+					domainId: domain.id,
+					address: candidate,
+					viaCatchall: true
+				};
+			}
+		}
 
 		if (domain?.catchall_user_id) {
 			return {
 				userId: domain.catchall_user_id,
+				mailboxId: null,
 				domainId: domain.id,
 				address: candidate,
 				viaCatchall: true

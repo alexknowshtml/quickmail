@@ -46,6 +46,7 @@ export async function insertEmail(
 		providerId?: string | null;
 		status?: MailStatus | null;
 		isRead?: boolean;
+		mailboxId?: string | null;
 	}
 ): Promise<string> {
 	const id = crypto.randomUUID();
@@ -63,7 +64,8 @@ export async function insertEmail(
 		inReplyTo: input.inReplyTo,
 		references: input.references,
 		replyToEmailId: input.replyToEmailId,
-		subjectMatch: input.status !== 'draft'
+		subjectMatch: input.status !== 'draft',
+		mailboxId: input.mailboxId
 	});
 
 	await db
@@ -72,8 +74,8 @@ export async function insertEmail(
 				id, user_id, direction, from_addr, to_addr, cc_addr, bcc_addr, subject,
 				body_text, body_html, message_id, in_reply_to, references_header,
 				reply_to_email_id, thread_id, thread_key,
-				domain_id, provider_id, status, status_at, is_read
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)`
+				domain_id, provider_id, status, status_at, is_read, mailbox_id
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?)`
 		)
 		.bind(
 			id,
@@ -95,7 +97,8 @@ export async function insertEmail(
 			input.domainId ?? null,
 			input.providerId ?? null,
 			input.status ?? null,
-			input.isRead ? 1 : 0
+			input.isRead ? 1 : 0,
+			input.mailboxId ?? null
 		)
 		.run();
 

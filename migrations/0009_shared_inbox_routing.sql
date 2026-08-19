@@ -1,0 +1,15 @@
+-- Shared mailbox support: Step 3 — routing + threading scope
+--
+-- The mailbox-scoped indexes for thread resolution (mailbox_id, thread_id),
+-- (mailbox_id, thread_key), and (mailbox_id, message_id) were already added to
+-- the emails table in 0008_shared_inbox.sql. No new indexes are needed here.
+--
+-- Threading backfill note:
+-- Addresses attached to a mailbox after the initial migration will not have
+-- historical thread backfill. Emails received before the address was attached
+-- will remain scoped to the original user_id. Backfilling historical threads
+-- for a converted address is future work and requires a one-off migration that
+-- stamps mailbox_id on emails WHERE to_addr = <address>.
+--
+-- This migration is a placeholder to keep the step numbering intact.
+SELECT 1;

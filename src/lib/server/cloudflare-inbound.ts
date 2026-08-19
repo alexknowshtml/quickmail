@@ -83,7 +83,8 @@ export async function handleCloudflareInbound(
 		inReplyTo,
 		references,
 		domainId: route.domainId,
-		providerId
+		providerId,
+		mailboxId: route.mailboxId
 	});
 
 	await storeInboundAttachments(env, emailId, parsed.attachments);

@@ -100,6 +100,8 @@ export type ThreadLookup = {
 	replyToEmailId?: string | null;
 	/** Drafts start their own conversation instead of joining one by subject. */
 	subjectMatch?: boolean;
+	/** When set, thread lookups scope by mailbox_id instead of user_id. */
+	mailboxId?: string | null;
 };
 
 /**
@@ -112,10 +114,16 @@ export async function resolveThreadId(
 	userId: string,
 	input: ThreadLookup
 ): Promise<string> {
+	const mailboxId = input.mailboxId ?? null;
+	// Scope key: shared mailboxes use 'm{mailboxId}', personal use 'u{userId}'.
+	// All three rules must use the same scope so threads don't bleed across boundaries.
+	const scopeClause = mailboxId ? 'mailbox_id = ?' : 'user_id = ?';
+	const scopeValue = mailboxId ?? userId;
+
 	if (input.replyToEmailId) {
 		const parent = await db
-			.prepare('SELECT thread_id, id FROM emails WHERE id = ? AND user_id = ?')
-			.bind(input.replyToEmailId, userId)
+			.prepare(`SELECT thread_id, id FROM emails WHERE id = ? AND ${scopeClause}`)
+			.bind(input.replyToEmailId, scopeValue)
 			.first<{ thread_id: string | null; id: string }>();
 
 		if (parent) return parent.thread_id ?? parent.id;
@@ -129,12 +137,12 @@ export async function resolveThreadId(
 		const match = await db
 			.prepare(
 				`SELECT thread_id, id FROM emails
-				 WHERE user_id = ?
+				 WHERE ${scopeClause}
 				 AND message_id IS NOT NULL
 				 AND replace(replace(message_id, '<', ''), '>', '') IN (${placeholders})
 				 ORDER BY datetime(created_at) DESC LIMIT 1`
 			)
-			.bind(userId, ...referenced)
+			.bind(scopeValue, ...referenced)
 			.first<{ thread_id: string | null; id: string }>();
 
 		if (match) return match.thread_id ?? match.id;
@@ -161,14 +169,14 @@ export async function resolveThreadId(
 			const match = await db
 				.prepare(
 					`SELECT thread_id, id FROM emails
-					 WHERE user_id = ?
+					 WHERE ${scopeClause}
 					 AND thread_key = ?
 					 AND (status IS NULL OR status <> 'draft')
 					 AND datetime(created_at) > datetime('now', ?)
 					 AND (${overlap})
 					 ORDER BY datetime(created_at) DESC LIMIT 1`
 				)
-				.bind(userId, threadKey, `-${SUBJECT_MATCH_DAYS} day`, ...participants)
+				.bind(scopeValue, threadKey, `-${SUBJECT_MATCH_DAYS} day`, ...participants)
 				.first<{ thread_id: string | null; id: string }>();
 
 			if (match) return match.thread_id ?? match.id;
