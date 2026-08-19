@@ -30,6 +30,7 @@
 		/** Bold pill (unread) vs. plain total. */
 		badge?: number;
 		count?: number;
+		sub?: boolean;
 	};
 
 	const mailboxes = $derived<NavItem[]>([
@@ -45,7 +46,7 @@
 		...(isAdmin
 			? [
 					{ href: '/admin', icon: 'settings-3-line', label: 'Admin' },
-					{ href: '/admin/mailboxes', icon: 'mail-settings-line', label: 'Mailboxes' }
+					{ href: '/admin/mailboxes', icon: 'mail-settings-line', label: 'Mailboxes', sub: true }
 				]
 			: [])
 	]);
@@ -136,6 +137,7 @@
 				href={item.href}
 				class="nav-link"
 				class:active={isActive(item.href)}
+				class:nav-sub={item.sub}
 				title={collapsed ? item.label : undefined}
 				onclick={() => (mobileOpen = false)}
 			>
@@ -255,6 +257,16 @@
 		background: var(--color-surface-hover);
 		color: var(--color-text);
 		font-weight: 500;
+	}
+
+	.nav-sub {
+		padding-left: 1.75rem;
+		font-size: 0.8125rem;
+		color: var(--color-muted);
+	}
+
+	.sidebar.collapsed .nav-sub {
+		padding-left: 0;
 	}
 
 	.nav-label {
