@@ -17,7 +17,7 @@ export const load: LayoutServerLoad = async ({ locals, platform }) => {
 	// The sidebar shows these on every page, so they load with the shell.
 	const counts =
 		db && locals.user
-			? await getMailboxCounts(db, locals.user.id, locals.activeDomainId)
+			? await getMailboxCounts(db, { kind: 'user', userId: locals.user.id }, locals.activeDomainId)
 			: EMPTY_COUNTS;
 
 	return {
@@ -25,6 +25,7 @@ export const load: LayoutServerLoad = async ({ locals, platform }) => {
 		domains: locals.domains,
 		addresses: locals.addresses,
 		activeDomainId: locals.activeDomainId,
+		sharedMailboxes: locals.mailboxes,
 		counts
 	};
 };

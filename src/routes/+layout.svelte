@@ -58,6 +58,7 @@
 			domains={data.domains}
 			activeDomainId={data.activeDomainId}
 			isAdmin={data.user!.is_admin}
+			sharedMailboxes={data.sharedMailboxes ?? []}
 			bind:collapsed
 			bind:mobileOpen
 		/>

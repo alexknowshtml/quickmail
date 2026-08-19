@@ -3,13 +3,14 @@
 	import Icon from './Icon.svelte';
 	import Logo from './Logo.svelte';
 	import DomainSwitcher from './DomainSwitcher.svelte';
-	import type { Domain, MailboxCounts } from '$lib/types';
+	import type { Domain, MailboxCounts, SharedMailbox } from '$lib/types';
 
 	let {
 		counts,
 		domains,
 		activeDomainId,
 		isAdmin,
+		sharedMailboxes = [],
 		collapsed = $bindable(false),
 		mobileOpen = $bindable(false)
 	}: {
@@ -17,6 +18,7 @@
 		domains: Domain[];
 		activeDomainId: string | null;
 		isAdmin: boolean;
+		sharedMailboxes?: SharedMailbox[];
 		collapsed?: boolean;
 		mobileOpen?: boolean;
 	} = $props();
@@ -98,6 +100,26 @@
 			</a>
 		{/each}
 	</nav>
+
+	{#if sharedMailboxes.length > 0}
+		<div class="section">
+			{#if !collapsed}<p class="section-title">Shared</p>{/if}
+			<nav class="nav section-body">
+				{#each sharedMailboxes as mailbox (mailbox.id)}
+					<a
+						href="/shared/{mailbox.id}/inbox"
+						class="nav-link"
+						class:active={isActive(`/shared/${mailbox.id}`)}
+						title={collapsed ? mailbox.name : undefined}
+						onclick={() => (mobileOpen = false)}
+					>
+						<Icon name="mail-shared-line" size={17} />
+						{#if !collapsed}<span class="nav-label">{mailbox.name}</span>{/if}
+					</a>
+				{/each}
+			</nav>
+		</div>
+	{/if}
 
 	{#if !collapsed && domains.length > 0}
 		<div class="section">
