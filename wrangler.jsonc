@@ -9,17 +9,14 @@
 	// Your Cloudflare account is picked up from `wrangler login`. If you belong
 	// to more than one account, set CLOUDFLARE_ACCOUNT_ID in your environment
 	// or uncomment this and paste the ID from the Cloudflare dashboard sidebar.
-	// "account_id": "",
+	"account_id": "5a184901e92890d482ef3cebd473e392",
 
-	// Deploys to <name>.<your-subdomain>.workers.dev out of the box. To serve it
-	// from your own domain instead, uncomment this and make sure the zone is on
-	// the same Cloudflare account.
-	// "routes": [
-	// 	{
-	// 		"pattern": "mail.example.com",
-	// 		"custom_domain": true
-	// 	}
-	// ],
+	"routes": [
+		{
+			"pattern": "mail.liftphilly.org",
+			"custom_domain": true
+		}
+	],
 
 	"assets": {
 		"directory": ".svelte-kit/cloudflare",
@@ -34,8 +31,8 @@
 	// Locally, put values in .dev.vars (copy .dev.vars.example).
 
 	"vars": {
-		"EMAIL_PROVIDER": "resend"
-		// "CLOUDFLARE_MAIL_DOMAINS": "example.com"
+		"EMAIL_PROVIDER": "cloudflare",
+		"CLOUDFLARE_MAIL_DOMAINS": "liftphilly.org"
 	},
 
 	"send_email": [
@@ -50,7 +47,7 @@
 			"binding": "DB",
 			"database_name": "quickmail",
 			// Run `wrangler d1 create quickmail` and paste the id it prints here.
-			"database_id": "REPLACE_WITH_YOUR_D1_DATABASE_ID",
+			"database_id": "cf2f61f5-9687-426b-8eae-9190dcf02060",
 			"migrations_dir": "migrations"
 		}
 	],
