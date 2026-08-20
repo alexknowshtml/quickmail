@@ -10,11 +10,13 @@
 	let {
 		view,
 		mailbox,
-		filters
+		filters,
+		mailboxId
 	}: {
 		view: MailboxView;
 		mailbox: MailboxPage;
 		filters: MailboxFilters;
+		mailboxId?: string;
 	} = $props();
 
 	const META: Record<MailboxView, { title: string; icon: string; empty: string }> = {
@@ -96,7 +98,7 @@
 			await fetch('/api/mail/actions', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ action, ids })
+				body: JSON.stringify({ action, ids, ...(mailboxId ? { mailboxId } : {}) })
 			});
 			selected = [];
 			await invalidateAll();

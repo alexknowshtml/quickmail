@@ -7,6 +7,8 @@ import {
 	setEmailFlags,
 	getMailboxCounts
 } from '$lib/server/mail-store';
+import { requireMailboxAccess } from '$lib/server/mailbox-auth';
+import type { MailScope } from '$lib/types';
 
 /** Bulk actions from the list toolbar. */
 const ACTIONS = [
@@ -29,6 +31,7 @@ type Action = (typeof ACTIONS)[number];
 type ActionBody = {
 	action?: Action;
 	ids?: string[];
+	mailboxId?: string;
 };
 
 export const POST: RequestHandler = async ({ request, locals, platform }) => {
@@ -49,7 +52,15 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 		return json({ error: 'No messages selected' }, { status: 400 });
 	}
 
-	const scope = { kind: 'user' as const, userId: locals.user.id };
+	let scope: MailScope = { kind: 'user', userId: locals.user.id };
+	if (body.mailboxId) {
+		try {
+			await requireMailboxAccess(locals.user.id, body.mailboxId, db);
+			scope = { kind: 'mailbox', mailboxId: body.mailboxId };
+		} catch {
+			return json({ error: 'Forbidden' }, { status: 403 });
+		}
+	}
 
 	// The list works in conversations, so an action on a row applies to every
 	// message in it — trashing a thread takes its replies along.
@@ -87,7 +98,8 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 			break;
 	}
 
-	const counts = await getMailboxCounts(db, scope, locals.activeDomainId);
+	const userScope = { kind: 'user' as const, userId: locals.user.id };
+	const counts = await getMailboxCounts(db, userScope, locals.activeDomainId);
 
 	return json({ ok: true, affected, counts });
 };

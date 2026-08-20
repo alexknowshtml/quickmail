@@ -9,4 +9,4 @@
 	<title>{data.sharedMailbox.name} — Mail</title>
 </svelte:head>
 
-<MailboxView view={data.view} mailbox={data.mailbox} filters={data.filters} />
+<MailboxView view={data.view} mailbox={data.mailbox} filters={data.filters} mailboxId={data.sharedMailbox.id} />
