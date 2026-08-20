@@ -63,12 +63,29 @@ export const PATCH: RequestHandler = async ({ params, request, locals, platform 
 		messageOnly?: boolean;
 	};
 
-	const scope = { kind: 'user' as const, userId: locals.user.id };
-	const ids = body.messageOnly
-		? [params.id!]
-		: await expandToThreads(db, scope, [params.id!]);
+	let scope: MailScope = { kind: 'user', userId: locals.user.id };
 
-	const changed = await setEmailFlags(db, scope, ids, {
+	// If nothing matches personal scope, fall back to mailbox scope.
+	let probeIds = body.messageOnly ? [params.id!] : await expandToThreads(db, scope, [params.id!]);
+	if (probeIds.length === 0) {
+		const anyEmail = await db
+			.prepare('SELECT * FROM emails WHERE id = ?')
+			.bind(params.id!)
+			.first<EmailRow>();
+		if (anyEmail?.mailbox_id) {
+			try {
+				await requireMailboxAccess(locals.user.id, anyEmail.mailbox_id, db);
+				scope = { kind: 'mailbox', mailboxId: anyEmail.mailbox_id };
+				probeIds = body.messageOnly
+					? [params.id!]
+					: await expandToThreads(db, scope, [params.id!]);
+			} catch {
+				// Not a member — fall through to 404.
+			}
+		}
+	}
+
+	const changed = await setEmailFlags(db, scope, probeIds, {
 		isRead: body.isRead,
 		isStarred: body.isStarred,
 		trashed: body.trashed

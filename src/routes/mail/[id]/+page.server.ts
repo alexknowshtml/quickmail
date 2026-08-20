@@ -51,6 +51,8 @@ export const load: PageServerLoad = async ({ params, locals, platform }) => {
 		trashed: Boolean(email.deleted_at),
 		subject: displaySubject(messages[0]?.subject ?? email.subject),
 		messages: messages.map((message) => ({ ...message, is_read: true })),
-		replyFromAddress
+		replyFromAddress,
+		/** Set when this thread belongs to a shared mailbox. Drives back-navigation. */
+		mailboxId: scope.kind === 'mailbox' ? scope.mailboxId : null
 	};
 };

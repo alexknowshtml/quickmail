@@ -21,7 +21,13 @@
 	const starred = $derived(messages.some((message) => message.is_starred));
 
 	const backHref = $derived(
-		data.trashed ? '/trash' : latest?.direction === 'outbound' ? '/sent' : '/inbox'
+		data.mailboxId
+			? `/shared/${data.mailboxId}/inbox`
+			: data.trashed
+				? '/trash'
+				: latest?.direction === 'outbound'
+					? '/sent'
+					: '/inbox'
 	);
 
 	/**
