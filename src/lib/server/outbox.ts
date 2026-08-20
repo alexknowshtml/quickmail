@@ -10,6 +10,8 @@ import { parseRecipients, sendOutboundEmail } from './send-mail';
 
 export type ComposeInput = {
 	fromAddressId?: string | null;
+	/** Override the From display name. Defaults to user.name when omitted. */
+	senderName?: string | null;
 	to: string;
 	cc?: string | null;
 	bcc?: string | null;
@@ -80,7 +82,7 @@ export async function sendAndStore(
 
 	const { providerId } = await sendOutboundEmail(provider, {
 		from,
-		senderName: user.name,
+		senderName: input.senderName ?? user.name,
 		to: input.to,
 		cc: input.cc ?? undefined,
 		bcc: input.bcc ?? undefined,

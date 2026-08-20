@@ -112,6 +112,7 @@ export const POST: RequestHandler = async ({ params, request, locals, platform }
 	let scope: MailScope = { kind: 'user', userId: locals.user.id };
 	let original = await getEmailForScope(db, scope, params.id!);
 	let replyMailboxId: string | null = null;
+	let replyMailboxName: string | null = null;
 
 	if (!original) {
 		const anyEmail = await db
@@ -120,10 +121,11 @@ export const POST: RequestHandler = async ({ params, request, locals, platform }
 			.first<EmailRow>();
 		if (anyEmail?.mailbox_id) {
 			try {
-				await requireMailboxAccess(locals.user.id, anyEmail.mailbox_id, db);
+				const mailbox = await requireMailboxAccess(locals.user.id, anyEmail.mailbox_id, db);
 				original = anyEmail;
 				scope = { kind: 'mailbox', mailboxId: anyEmail.mailbox_id };
 				replyMailboxId = anyEmail.mailbox_id;
+				replyMailboxName = mailbox.name;
 			} catch {
 				// Not a member — fall through to 404.
 			}
@@ -174,6 +176,9 @@ export const POST: RequestHandler = async ({ params, request, locals, platform }
 			locals.user,
 			{
 				fromAddressId: replyMailboxId ? undefined : (body.fromAddressId ?? preferredAddress?.id),
+				senderName: replyMailboxName
+					? `${locals.user.name} from ${replyMailboxName}`
+					: undefined,
 				mailboxId: replyMailboxId,
 				to,
 				subject,
