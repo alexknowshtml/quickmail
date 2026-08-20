@@ -1,5 +1,6 @@
 import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
+import { getAddressForMailbox } from '$lib/server/domains';
 import { getEmailForScope, listThreadMessages, markThreadRead } from '$lib/server/mail-store';
 import { displaySubject } from '$lib/server/threads';
 import type { MailScope } from '$lib/types';
@@ -35,12 +36,21 @@ export const load: PageServerLoad = async ({ params, locals, platform }) => {
 	await markThreadRead(db, scope, email);
 	const messages = await listThreadMessages(db, scope, email);
 
+	// For shared mailbox threads, surface the sending address so the reply form
+	// can show it before the user hits Send.
+	let replyFromAddress: string | null = null;
+	if (scope.kind === 'mailbox') {
+		const addr = await getAddressForMailbox(db, scope.mailboxId);
+		replyFromAddress = addr?.address ?? null;
+	}
+
 	return {
 		threadId: email.thread_id ?? email.id,
 		/** The message that was linked to — expanded first when the page opens. */
 		focusId: email.id,
 		trashed: Boolean(email.deleted_at),
 		subject: displaySubject(messages[0]?.subject ?? email.subject),
-		messages: messages.map((message) => ({ ...message, is_read: true }))
+		messages: messages.map((message) => ({ ...message, is_read: true })),
+		replyFromAddress
 	};
 };

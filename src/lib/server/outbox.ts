@@ -2,7 +2,7 @@ import type { D1Database, R2Bucket } from '@cloudflare/workers-types';
 import type { MailAddress, OutboundAttachmentInput, User } from '$lib/types';
 import { base64ByteLength, insertAttachments } from './attachments';
 import { MAX_TOTAL_ATTACHMENT_BYTES } from './constants';
-import { getAddressForUser, getDefaultAddress } from './domains';
+import { getAddressForMailbox, getAddressForUser, getDefaultAddress } from './domains';
 import { stripHtml } from './html';
 import { insertEmail } from './mail-store';
 import { initialOutboundStatus, type EmailProvider } from './email-provider';
@@ -19,6 +19,7 @@ export type ComposeInput = {
 	inReplyTo?: string | null;
 	references?: string | null;
 	replyToEmailId?: string | null;
+	mailboxId?: string | null;
 	attachments?: OutboundAttachmentInput[];
 };
 
@@ -29,8 +30,17 @@ export type ComposeInput = {
 export async function resolveFromAddress(
 	db: D1Database,
 	user: User,
-	addressId?: string | null
+	addressId?: string | null,
+	mailboxId?: string | null
 ): Promise<MailAddress> {
+	if (mailboxId) {
+		const address = await getAddressForMailbox(db, mailboxId);
+		if (!address) {
+			throw new Error('No sending address is attached to this mailbox. Ask an admin to add one.');
+		}
+		return address;
+	}
+
 	const address = addressId
 		? await getAddressForUser(db, user.id, addressId)
 		: await getDefaultAddress(db, user.id);
@@ -50,7 +60,7 @@ export async function sendAndStore(
 	input: ComposeInput
 ): Promise<{ emailId: string; providerId: string; from: MailAddress }> {
 	// resolveFromAddress scopes the lookup to this user, so ownership is implied.
-	const from = await resolveFromAddress(env.DB, user, input.fromAddressId);
+	const from = await resolveFromAddress(env.DB, user, input.fromAddressId, input.mailboxId ?? null);
 
 	const html = input.html?.trim() || null;
 	const text = input.text?.trim() || (html ? stripHtml(html) : '');
@@ -95,6 +105,7 @@ export async function sendAndStore(
 		inReplyTo: input.inReplyTo ?? null,
 		references: input.references ?? null,
 		replyToEmailId: input.replyToEmailId ?? null,
+		mailboxId: input.mailboxId ?? null,
 		domainId: from.domain_id,
 		providerId,
 		status: initialOutboundStatus(provider.kind),

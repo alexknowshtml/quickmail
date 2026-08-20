@@ -199,6 +199,11 @@
 
 		{#if replyOpen}
 			<form class="reply-section" onsubmit={sendReply}>
+				{#if data.replyFromAddress}
+					<p class="reply-from">
+						From: <strong>{data.replyFromAddress}</strong>
+					</p>
+				{/if}
 				<p class="reply-to">
 					Replying to
 					<strong>
@@ -298,6 +303,17 @@
 		margin-top: 1.5rem;
 		padding-top: 1.25rem;
 		box-shadow: inset 0 1px 0 var(--color-line);
+	}
+
+	.reply-from {
+		margin-bottom: 0.375rem;
+		font-size: 0.8125rem;
+		color: var(--color-muted);
+	}
+
+	.reply-from strong {
+		font-weight: 500;
+		color: var(--color-text-secondary);
 	}
 
 	.reply-to {

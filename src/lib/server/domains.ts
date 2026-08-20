@@ -267,6 +267,17 @@ export async function deleteAddress(
 		.run();
 }
 
+export async function getAddressForMailbox(
+	db: D1Database,
+	mailboxId: string
+): Promise<MailAddress | null> {
+	const row = await db
+		.prepare(`${ADDRESS_SELECT} WHERE a.mailbox_id = ? LIMIT 1`)
+		.bind(mailboxId)
+		.first<AddressRow>();
+	return row ? mapAddress(row) : null;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Inbound routing                                                             */
 /* -------------------------------------------------------------------------- */
