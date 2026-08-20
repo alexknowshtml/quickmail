@@ -84,7 +84,7 @@
 
 	async function restore() {
 		await patch({ trashed: false });
-		goto('/inbox');
+		goto(data.mailboxId ? `/shared/${data.mailboxId}/inbox` : '/inbox');
 	}
 
 	async function destroy() {
