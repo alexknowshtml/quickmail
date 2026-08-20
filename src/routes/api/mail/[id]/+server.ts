@@ -11,8 +11,10 @@ import {
 	getEmailForScope,
 	listThreadMessages,
 	markThreadRead,
-	setEmailFlags
+	setEmailFlags,
+	type EmailRow
 } from '$lib/server/mail-store';
+import { requireMailboxAccess } from '$lib/server/mailbox-auth';
 import { sendAndStore } from '$lib/server/outbox';
 import { buildReferences, displaySubject } from '$lib/server/threads';
 import type { MailScope, OutboundAttachmentInput } from '$lib/types';
@@ -103,20 +105,27 @@ export const POST: RequestHandler = async ({ params, request, locals, platform }
 		return json({ error: 'Unauthorized' }, { status: 401 });
 	}
 
-	// Find the email across personal and shared mailbox scopes.
+	// Find the email: try personal scope first, then mailbox scope via direct
+	// DB lookup + membership check (more reliable than iterating locals.mailboxes,
+	// which can be stale or empty when the webhook stores mail before the session
+	// populates).
 	let scope: MailScope = { kind: 'user', userId: locals.user.id };
 	let original = await getEmailForScope(db, scope, params.id!);
 	let replyMailboxId: string | null = null;
 
 	if (!original) {
-		for (const mailbox of locals.mailboxes) {
-			const mbScope: MailScope = { kind: 'mailbox', mailboxId: mailbox.id };
-			const found = await getEmailForScope(db, mbScope, params.id!);
-			if (found) {
-				original = found;
-				scope = mbScope;
-				replyMailboxId = mailbox.id;
-				break;
+		const anyEmail = await db
+			.prepare('SELECT * FROM emails WHERE id = ?')
+			.bind(params.id!)
+			.first<EmailRow>();
+		if (anyEmail?.mailbox_id) {
+			try {
+				await requireMailboxAccess(locals.user.id, anyEmail.mailbox_id, db);
+				original = anyEmail;
+				scope = { kind: 'mailbox', mailboxId: anyEmail.mailbox_id };
+				replyMailboxId = anyEmail.mailbox_id;
+			} catch {
+				// Not a member — fall through to 404.
 			}
 		}
 	}
