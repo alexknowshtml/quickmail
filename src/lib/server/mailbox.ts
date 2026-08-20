@@ -1,5 +1,5 @@
 import { listMailbox } from './mail-store';
-import type { MailboxFilters, MailboxPage, MailboxView } from '$lib/types';
+import type { MailboxFilters, MailboxPage, MailScope, MailboxView } from '$lib/types';
 import type { D1Database } from '@cloudflare/workers-types';
 
 export function readFilters(url: URL): MailboxFilters {
@@ -16,18 +16,18 @@ const EMPTY: MailboxPage = { threads: [], total: 0, page: 1, pageCount: 1, pageS
 /** Shared by every mailbox route — same query shape, different view. */
 export async function loadMailbox(
 	db: D1Database | undefined,
-	userId: string | undefined,
+	scope: MailScope | undefined,
 	view: MailboxView,
 	url: URL,
 	domainId: string | null
 ): Promise<{ view: MailboxView; mailbox: MailboxPage; filters: MailboxFilters }> {
 	const filters = readFilters(url);
 
-	if (!db || !userId) {
+	if (!db || !scope) {
 		return { view, mailbox: EMPTY, filters };
 	}
 
-	const mailbox = await listMailbox(db, userId, {
+	const mailbox = await listMailbox(db, scope, {
 		view,
 		domainId,
 		q: filters.q,

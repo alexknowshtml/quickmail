@@ -49,48 +49,45 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 		return json({ error: 'No messages selected' }, { status: 400 });
 	}
 
+	const scope = { kind: 'user' as const, userId: locals.user.id };
+
 	// The list works in conversations, so an action on a row applies to every
 	// message in it — trashing a thread takes its replies along.
-	const ids = await expandToThreads(db, locals.user.id, selected);
+	const ids = await expandToThreads(db, scope, selected);
 
 	let affected = 0;
 
 	switch (action) {
 		case 'read':
-			affected = await setEmailFlags(db, locals.user.id, ids, { isRead: true });
+			affected = await setEmailFlags(db, scope, ids, { isRead: true });
 			break;
 		case 'unread':
-			affected = await setEmailFlags(db, locals.user.id, ids, { isRead: false });
+			affected = await setEmailFlags(db, scope, ids, { isRead: false });
 			break;
 		case 'star':
-			affected = await setEmailFlags(db, locals.user.id, ids, { isStarred: true });
+			affected = await setEmailFlags(db, scope, ids, { isStarred: true });
 			break;
 		case 'unstar':
-			affected = await setEmailFlags(db, locals.user.id, ids, { isStarred: false });
+			affected = await setEmailFlags(db, scope, ids, { isStarred: false });
 			break;
 		case 'trash':
-			affected = await setEmailFlags(db, locals.user.id, ids, { trashed: true });
+			affected = await setEmailFlags(db, scope, ids, { trashed: true });
 			break;
 		case 'restore':
-			affected = await setEmailFlags(db, locals.user.id, ids, { trashed: false });
+			affected = await setEmailFlags(db, scope, ids, { trashed: false });
 			break;
 		case 'delete':
-			affected = await deleteEmailsPermanently(
-				db,
-				platform?.env.ATTACHMENTS,
-				locals.user.id,
-				ids
-			);
+			affected = await deleteEmailsPermanently(db, platform?.env.ATTACHMENTS, scope, ids);
 			break;
 		case 'read-all':
-			affected = await markAllRead(db, locals.user.id, locals.activeDomainId);
+			affected = await markAllRead(db, scope, locals.activeDomainId);
 			break;
 		case 'empty-trash':
-			affected = await emptyTrash(db, platform?.env.ATTACHMENTS, locals.user.id);
+			affected = await emptyTrash(db, platform?.env.ATTACHMENTS, scope);
 			break;
 	}
 
-	const counts = await getMailboxCounts(db, locals.user.id, locals.activeDomainId);
+	const counts = await getMailboxCounts(db, scope, locals.activeDomainId);
 
 	return json({ ok: true, affected, counts });
 };

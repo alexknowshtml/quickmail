@@ -28,7 +28,7 @@ describe('smoke: personal mailbox isolation', () => {
 			subject: 'Hello Bob',
 		});
 
-		const result = await listMailbox(env.DB, alice.id, { view: 'inbox' });
+		const result = await listMailbox(env.DB, { kind: 'user', userId: alice.id }, { view: 'inbox' });
 
 		expect(result.total).toBe(1);
 		expect(result.threads).toHaveLength(1);

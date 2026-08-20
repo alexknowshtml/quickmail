@@ -216,3 +216,7 @@ export type SharedMailboxDetail = SharedMailbox & {
 	members: MailboxMember[];
 	addresses: MailAddress[];
 };
+
+export type MailScope =
+	| { kind: 'user'; userId: string }
+	| { kind: 'mailbox'; mailboxId: string };

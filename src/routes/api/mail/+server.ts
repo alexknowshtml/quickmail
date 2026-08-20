@@ -28,7 +28,7 @@ export const GET: RequestHandler = async ({ locals, platform, url }) => {
 	}
 
 	const direction = url.searchParams.get('direction');
-	const emails = await listEmails(db, locals.user.id, {
+	const emails = await listEmails(db, { kind: 'user', userId: locals.user.id }, {
 		direction: direction === 'inbound' || direction === 'outbound' ? direction : undefined,
 		domainId: locals.activeDomainId
 	});

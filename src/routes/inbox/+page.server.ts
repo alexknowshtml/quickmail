@@ -2,4 +2,4 @@ import type { PageServerLoad } from './$types';
 import { loadMailbox } from '$lib/server/mailbox';
 
 export const load: PageServerLoad = async ({ locals, platform, url }) =>
-	loadMailbox(platform?.env.DB, locals.user?.id, 'inbox', url, locals.activeDomainId);
+	loadMailbox(platform?.env.DB, locals.user ? { kind: 'user', userId: locals.user.id } : undefined, 'inbox', url, locals.activeDomainId);
